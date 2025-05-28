@@ -36,7 +36,8 @@ if (MSVC)
       /WX
   )
   target_compile_options(main PUBLIC /wd4244)
-else()  target_compile_options(main
+else()
+  target_compile_options(main
     PRIVATE
       -Wall
       -Wextra
