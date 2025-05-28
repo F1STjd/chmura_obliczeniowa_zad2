@@ -1,4 +1,21 @@
-## Zadanie 2
+## Zadanie 2 - GitHub Actions CI/CD Pipeline dla aplikacji pogodowej
+
+**Autor:** Konrad Nowak  
+**Repozytorium:** https://github.com/F1STjd/chmura_obliczeniowa_zad2
+
+## 🚀 Szybki start
+
+### Przed pierwszym uruchomieniem workflow:
+
+1. **Skonfiguruj sekrety** w `Settings > Secrets and variables > Actions`:
+   - `GHCR_TOKEN` - Personal Access Token z uprawnieniami `write:packages`
+   - `DOCKERHUB_USERNAME` - Nazwa użytkownika DockerHub  
+   - `DOCKERHUB_TOKEN` - Access Token z DockerHub
+
+2. **Uruchom workflow** przez:
+   - Push do gałęzi `main` (automatycznie)
+   - Zakładka `Actions > Docker Multi-arch Build and Security Pipeline > Run workflow`
+
 ## GitHub Actions CI/CD Pipeline
 
 ### Opis Workflow
