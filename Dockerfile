@@ -11,7 +11,8 @@ RUN --mount=type=cache,target=/var/lib/apt,id=apt \
         ca-certificates \
         software-properties-common && \
     add-apt-repository ppa:ubuntu-toolchain-r/test && \
-    apt-get update && apt-get install -y --no-install-recommends \        build-essential \
+    apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
         gcc-14 \
         g++-14 \
         cmake \
