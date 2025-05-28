@@ -29,8 +29,8 @@ RUN git clone --depth 1 https://github.com/fmtlib/fmt.git && \
 RUN cmake -S . -B build \
           -DCMAKE_BUILD_TYPE=MinSizeRel \
           -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" \
-          -DCMAKE_C_FLAGS="-Oz -ffunction-sections -fdata-sections -fvisibility=hidden" \
-          -DCMAKE_CXX_FLAGS="-Oz -ffunction-sections -fdata-sections -fvisibility=hidden -fno-rtti" \
+          -DCMAKE_C_FLAGS="-Os -ffunction-sections -fdata-sections -fvisibility=hidden" \
+          -DCMAKE_CXX_FLAGS="-Os -ffunction-sections -fdata-sections -fvisibility=hidden -fno-rtti" \
           -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++ -Wl,--gc-sections -Wl,--build-id=none -Wl,--strip-all -Wl,--as-needed" && \
     cmake --build build --parallel && \
     strip build/bin/main

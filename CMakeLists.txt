@@ -36,8 +36,7 @@ if (MSVC)
       /WX
   )
   target_compile_options(main PUBLIC /wd4244)
-else()
-  target_compile_options(main
+else()  target_compile_options(main
     PRIVATE
       -Wall
       -Wextra
@@ -45,7 +44,7 @@ else()
       -Wshadow
       -Wconversion
       -fdiagnostics-color
-      $<$<CONFIG:MinSizeRel>:-Oz>
+      $<$<CONFIG:MinSizeRel>:-Os>
       $<$<CONFIG:MinSizeRel>:-ffunction-sections>
       $<$<CONFIG:MinSizeRel>:-fdata-sections>
       $<$<CONFIG:MinSizeRel>:-fvisibility=hidden>
