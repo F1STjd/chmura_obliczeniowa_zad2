@@ -8,6 +8,9 @@ project(
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(fmt REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(OPENSSL REQUIRED openssl)
+pkg_check_modules(ZLIB REQUIRED zlib)
 
 # Add cpp-httplib as header-only library
 add_subdirectory(cpp-httplib)
@@ -19,6 +22,8 @@ add_executable(main
 target_link_libraries(main PRIVATE 
   fmt::fmt
   httplib::httplib
+  ${OPENSSL_STATIC_LIBRARIES}
+  ${ZLIB_STATIC_LIBRARIES}
 )
 
 target_compile_definitions(main PRIVATE CPPHTTPLIB_NO_EXCEPTIONS)
@@ -53,13 +58,11 @@ else()
       $<$<CONFIG:MinSizeRel>:-fno-unwind-tables>
       $<$<CONFIG:MinSizeRel>:-fno-asynchronous-unwind-tables>
   )
-  
-  if(NOT APPLE)
+    if(NOT APPLE)
     target_link_options(main
       PRIVATE
         $<$<CONFIG:MinSizeRel>:-Wl,--gc-sections>
         $<$<CONFIG:MinSizeRel>:-s>
-        $<$<CONFIG:MinSizeRel>:-static>
     )
   endif()
 endif()
