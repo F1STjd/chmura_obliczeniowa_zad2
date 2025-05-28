@@ -12,9 +12,12 @@ RUN --mount=type=cache,target=/var/lib/apt,id=apt \
         software-properties-common && \
     add-apt-repository ppa:ubuntu-toolchain-r/test && \
     apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
         gcc-14 \
         g++-14 \
         cmake \
+        make \
+        ninja-build \
         git \
         libssl-dev \
         libz-dev && \
@@ -28,13 +31,13 @@ COPY cpp-httplib/ ./cpp-httplib/
 
 RUN git clone --depth 1 https://github.com/fmtlib/fmt.git && \
     cd fmt && \
-    cmake -DCMAKE_BUILD_TYPE=MinSizeRel \
+    cmake -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel \
           -DBUILD_SHARED_LIBS=OFF \
           -DCMAKE_INSTALL_PREFIX=/usr . && \
     cmake --build . --target install && \
     cd .. && rm -rf fmt
 
-RUN cmake -S . -B build \
+RUN cmake -G Ninja -S . -B build \
           -DCMAKE_BUILD_TYPE=MinSizeRel \
           -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" \
           -DCMAKE_C_FLAGS="-Os -ffunction-sections -fdata-sections -fvisibility=hidden" \
