@@ -3,20 +3,28 @@
 ############################
 # Stage 1: Build (Multi-arch)
 ############################
-FROM --platform=$BUILDPLATFORM ubuntu:22.04 AS builder
+FROM --platform=$BUILDPLATFORM ubuntu:24.04 AS builder
 
+# Install newer GCC and dependencies
 RUN --mount=type=cache,target=/var/lib/apt,id=apt \
     apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
-        build-essential \
+        software-properties-common && \
+    add-apt-repository ppa:ubuntu-toolchain-r/test && \
+    apt-get update && apt-get install -y --no-install-recommends \
+        gcc-14 \
+        g++-14 \
         cmake \
         git \
         libssl-dev \
         libz-dev && \
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100 && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 COPY CMakeLists.txt main.cpp ./
+COPY cpp-httplib/ ./cpp-httplib/
 
 RUN git clone --depth 1 https://github.com/fmtlib/fmt.git && \
     cd fmt && \
@@ -38,7 +46,7 @@ RUN cmake -S . -B build \
 ############################
 # Stage 2: Runtime Image
 ############################
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libssl3 \

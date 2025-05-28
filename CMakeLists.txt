@@ -9,6 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(fmt REQUIRED)
 
+# Add cpp-httplib as header-only library
 add_subdirectory(cpp-httplib)
 
 add_executable(main 
@@ -18,7 +19,6 @@ add_executable(main
 target_link_libraries(main PRIVATE 
   fmt::fmt
   httplib::httplib
-  ${ZLIB_LIBRARIES}
 )
 
 target_compile_definitions(main PRIVATE CPPHTTPLIB_NO_EXCEPTIONS)
@@ -49,7 +49,6 @@ else()
       $<$<CONFIG:MinSizeRel>:-ffunction-sections>
       $<$<CONFIG:MinSizeRel>:-fdata-sections>
       $<$<CONFIG:MinSizeRel>:-fvisibility=hidden>
-      $<$<CONFIG:MinSizeRel>:-fno-exceptions>
       $<$<CONFIG:MinSizeRel>:-fno-rtti>
       $<$<CONFIG:MinSizeRel>:-fno-unwind-tables>
       $<$<CONFIG:MinSizeRel>:-fno-asynchronous-unwind-tables>
