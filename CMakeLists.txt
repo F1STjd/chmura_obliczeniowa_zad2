@@ -9,8 +9,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(fmt REQUIRED)
 
-# httplib is header-only, no need to add subdirectory
-
 add_executable(main 
   main.cpp
 )
