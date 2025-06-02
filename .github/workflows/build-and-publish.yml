@@ -1,6 +1,6 @@
-# ================================================================================
+# ===============================================================================
 # GitHub Actions Workflow: Multi-architecture Docker Build, Test & Publish
-# ================================================================================
+# ===============================================================================
 # 
 # Ten workflow realizuje kompletny pipeline CI/CD dla aplikacji pogodowej C++:
 # 1. Budowanie obrazu Docker dla architektur linux/amd64 i linux/arm64
