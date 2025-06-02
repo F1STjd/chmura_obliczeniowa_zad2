@@ -156,6 +156,5 @@ main() -> std::int32_t
 
       res.set_content(html, "text/html");
     });
-
   server.listen("0.0.0.0", port);
 }
