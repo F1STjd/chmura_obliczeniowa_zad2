@@ -45,10 +45,6 @@ Thumbs.db
 *.bak
 *.backup
 
-# Package managers
-vcpkg_installed/
-conan.lock
-
 # Docker and CI/CD
 .env
 .env.local
