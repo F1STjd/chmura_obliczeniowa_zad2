@@ -1,5 +1,5 @@
 # ================================================================================
-# Multi-Architecture Dockerfile for C++ Weather Application
+# Multi-Architecture Dockerfile
 # ================================================================================
 # Optymalizowany Dockerfile obsługujący budowanie dla linux/amd64 i linux/arm64
 # Wykorzystuje Docker Buildx do cross-compilation i budowania multi-arch images
