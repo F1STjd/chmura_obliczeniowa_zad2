@@ -2,6 +2,10 @@
 build/
 .cache/
 
+# External dependencies (downloaded during build)
+cpp-httplib/
+fmt/
+
 # IDE files
 .vscode/
 .vs/
@@ -44,3 +48,13 @@ Thumbs.db
 # Package managers
 vcpkg_installed/
 conan.lock
+
+# Docker and CI/CD
+.env
+.env.local
+.env.*.local
+docker-compose.override.yml
+
+# GitHub Actions artifacts
+trivy-results.sarif
+*.tar

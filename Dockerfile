@@ -1,63 +1,89 @@
-# syntax=docker/dockerfile:1.4
+# ================================================================================
+# Multi-Architecture Dockerfile for C++ Weather Application
+# ================================================================================
+# Optymalizowany Dockerfile obsługujący budowanie dla linux/amd64 i linux/arm64
+# Wykorzystuje Docker Buildx do cross-compilation i budowania multi-arch images
 
-############################
-# Stage 1: Build (Multi-arch)
-############################
-FROM --platform=$BUILDPLATFORM ubuntu:24.04 AS builder
+# ----------------
+# Stage 1: build
+# ----------------
+FROM alpine:3.21 AS builder
 
-# Install newer GCC and dependencies
-RUN --mount=type=cache,target=/var/lib/apt,id=apt \
-    apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        software-properties-common && \
-    add-apt-repository ppa:ubuntu-toolchain-r/test && \
-    apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        gcc-14 \
-        g++-14 \
-        cmake \
-        make \
-        ninja-build \
-        git \
-        pkg-config \
-        libssl-dev \
-        libz-dev && \
-    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100 && \
-    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100 && \
-    rm -rf /var/lib/apt/lists/*
+# Instalacja zależności kompilacji z obsługą cross-compilation
+RUN apk add --no-cache \
+      build-base \
+      cmake \
+      git \
+      linux-headers \
+      musl-dev \
+      openssl-libs-static \
+      libstdc++-dev \
+      # Dodatkowo dla multi-arch
+      gcc-aarch64-none-elf \
+      gcc-x86_64-linux-gnu
+
+# Argumenty build-time dla obsługi różnych architektur
+ARG TARGETPLATFORM
+ARG TARGETOS  
+ARG TARGETARCH
 
 WORKDIR /src
+
+# Kopiowanie kodu źródłowego i plików konfiguracyjnych
 COPY CMakeLists.txt main.cpp ./
-COPY cpp-httplib/ ./cpp-httplib/
 
-RUN git clone --depth 1 https://github.com/fmtlib/fmt.git && \
-    cd fmt && \
-    cmake -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel \
-          -DBUILD_SHARED_LIBS=OFF \
-          -DCMAKE_INSTALL_PREFIX=/usr . && \
-    cmake --build . --target install && \
-    cd .. && rm -rf fmt
+# Build static fmt library z obsługą cross-compilation
+RUN git clone --depth 1 https://github.com/fmtlib/fmt.git \
+  && mkdir fmt/build && cd fmt/build \
+  && cmake -DCMAKE_BUILD_TYPE=MinSizeRel \
+           -DBUILD_SHARED_LIBS=OFF \
+           -DCMAKE_INSTALL_PREFIX=/usr \
+           -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+           .. \
+  && make -j$(nproc) install
 
-RUN cmake -G Ninja -S . -B build \
-          -DCMAKE_BUILD_TYPE=MinSizeRel \
-          -DCMAKE_C_FLAGS="-Os -ffunction-sections -fdata-sections -fvisibility=hidden" \
-          -DCMAKE_CXX_FLAGS="-Os -ffunction-sections -fdata-sections -fvisibility=hidden -fno-rtti" \
-          -DCMAKE_EXE_LINKER_FLAGS="-Wl,--gc-sections -Wl,--build-id=none -Wl,--strip-all -Wl,--as-needed" && \
-    cmake --build build --parallel && \
-    strip build/bin/main
+# Instalacja httplib (header-only library)
+RUN git clone --depth 1 https://github.com/yhirose/cpp-httplib.git \
+  && cp -R cpp-httplib /usr/include/httplib
 
-############################
-# Stage 2: Runtime Image
-############################
-FROM ubuntu:24.04
+# Build aplikacji z maksymalną optymalizacją rozmiaru i statycznym linkowaniem
+WORKDIR /src
+RUN mkdir build && cd build \
+  && cmake \
+       -DCMAKE_BUILD_TYPE=MinSizeRel \
+       -DBUILD_SHARED_LIBS=OFF \
+       -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" \
+       -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+       -DCMAKE_C_FLAGS="-Oz -ffunction-sections -fdata-sections -fvisibility=hidden -flto" \
+       -DCMAKE_CXX_FLAGS="-Oz -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-rtti" \
+       -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++ \
+        -Wl,--gc-sections -s \
+        -Wl,--build-id=none \
+        -Wl,--strip-all -Wl,--as-needed" \
+       .. \
+  && make -j$(nproc)
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        libssl3 \
-        zlib1g \
-        ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+# Strip symboli debugowania dla minimalnego rozmiaru
+RUN strip build/bin/main
 
+# --------------------------------
+# Stage 2: Minimal runtime image
+# --------------------------------
+FROM scratch
+
+# Metadane obrazu
+LABEL org.opencontainers.image.title="Weather Application" \
+      org.opencontainers.image.description="Minimal C++ weather application with web interface" \
+      org.opencontainers.image.author="Konrad Nowak" \
+      org.opencontainers.image.source="https://github.com/username/repo" \
+      org.opencontainers.image.licenses="MIT"
+
+# Kopiowanie statycznie skompilowanego pliku wykonywalnego
 COPY --from=builder /src/build/bin/main /app/weather
 
+# Port aplikacji
 EXPOSE 3000
+
+# Punkt wejścia aplikacji
 ENTRYPOINT ["/app/weather"]
+  

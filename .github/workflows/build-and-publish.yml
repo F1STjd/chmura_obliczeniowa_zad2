@@ -1,0 +1,211 @@
+# ================================================================================
+# GitHub Actions Workflow: Multi-architecture Docker Build, Test & Publish
+# ================================================================================
+# 
+# Ten workflow realizuje kompletny pipeline CI/CD dla aplikacji pogodowej C++:
+# 1. Budowanie obrazu Docker dla architektur linux/amd64 i linux/arm64
+# 2. Cache warstw budowania w DockerHub dla optymalizacji czasu budowy
+# 3. Skanowanie podatności CVE przy użyciu Trivy
+# 4. Publikacja obrazu do GitHub Container Registry (ghcr.io)
+#
+# Logika tagowania obrazów:
+# - Push do main/master: tagi 'latest' i 'main-{sha}'
+# - Push tagów vX.Y.Z: tag zgodny z wersją + 'latest'
+# - Inne gałęzie: tag z nazwą gałęzi + SHA
+#
+# Cache strategy:
+# - Cache przechowywany w DockerHub jako {dockerhub_username}/cache:buildcache-{ref}
+# - Tryb 'max' dla pełnego cachowania warstw
+# - Osobne cache dla każdej gałęzi/tagu
+
+name: Build and Publish Multi-Arch Docker Image
+
+on:
+  # Wyzwalacze workflow
+  push:
+    branches: 
+      - main
+      - master
+    tags:
+      - 'v*.*.*'  # Tagi wersji (np. v1.0.0, v2.1.3)
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:  # Możliwość ręcznego uruchomienia
+
+env:
+  # Zmienne środowiskowe
+  REGISTRY: ghcr.io
+  # Nazwa obrazu będzie automatycznie wyprowadzona z nazwy repo
+  IMAGE_NAME: ${{ github.repository }}
+  # DockerHub cache repo (ZMIEŃ NA SWOJE - format: username/cache-repo-name)
+  CACHE_REPO: konradnowakpollub/buildcache
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # Uprawnienia do publikacji w GHCR
+      security-events: write  # Uprawnienia do upload wyników skanowania CVE
+      
+    steps:
+      # STEP 1: Checkout kodu źródłowego
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      # STEP 2: Setup Docker Buildx dla multi-arch
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          # Włączenie zaawansowanych funkcji buildx
+          driver-opts: |
+            network=host
+            
+      # STEP 3: Logowanie do DockerHub dla cache
+      - name: Log in to DockerHub (for cache)
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          
+      # STEP 4: Logowanie do GitHub Container Registry
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      # STEP 5: Generowanie metadanych dla tagów i labeli
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Dla tagów wersji (v1.0.0) -> 1.0.0, latest
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # Dla głównej gałęzi -> latest, main-{sha}
+            type=ref,event=branch,suffix=-{{sha}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            # Dla PR -> pr-{number}
+            type=ref,event=pr
+          labels: |
+            org.opencontainers.image.title=Weather App
+            org.opencontainers.image.description=Minimal C++ weather application
+            org.opencontainers.image.vendor=Konrad Nowak
+            
+      # STEP 6: Build obrazu z cache (bez push - tylko dla testu)
+      - name: Build Docker image (with cache)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          # Cache configuration
+          cache-from: |
+            type=registry,ref=${{ env.CACHE_REPO }}:buildcache-${{ github.ref_name }}
+            type=registry,ref=${{ env.CACHE_REPO }}:buildcache-main
+          cache-to: |
+            type=registry,ref=${{ env.CACHE_REPO }}:buildcache-${{ github.ref_name }},mode=max
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Nie pushuj jeszcze - najpierw skanowanie CVE
+          push: false
+          load: false
+          # Eksport do lokalnego registru dla skanowania
+          outputs: type=oci,dest=/tmp/image.tar
+          
+      # STEP 7: Load obrazu do lokalnego Docker daemon dla skanowania
+      # (Trivy wymaga dostępu do obrazu lokalnie)
+      - name: Build single-arch image for CVE scanning  
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64  # Tylko amd64 dla skanowania
+          cache-from: |
+            type=registry,ref=${{ env.CACHE_REPO }}:buildcache-${{ github.ref_name }}
+            type=registry,ref=${{ env.CACHE_REPO }}:buildcache-main
+          tags: scan-image:latest
+          load: true  # Ładuj do lokalnego daemon
+          
+      # STEP 8: Skanowanie CVE przy użyciu Trivy
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'scan-image:latest'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'  # Nie przerywaj workflow - sprawdzimy wyniki ręcznie
+          
+      # STEP 9: Upload wyników skanowania do GitHub Security
+      - name: Upload Trivy scan results to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+          
+      # STEP 10: Sprawdzenie wyników skanowania Trivy
+      - name: Check Trivy scan results
+        run: |
+          echo "Sprawdzanie wyników skanowania Trivy..."
+          
+          # Uruchom Trivy ponownie w trybie table dla czytelności
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image --severity CRITICAL,HIGH \
+            --format table scan-image:latest
+          
+          # Sprawdź czy są podatności CRITICAL lub HIGH
+          VULN_COUNT=$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image --severity CRITICAL,HIGH \
+            --format json scan-image:latest | jq '[.Results[]?.Vulnerabilities // []] | add | length')
+          
+          echo "Znalezione podatności CRITICAL/HIGH: $VULN_COUNT"
+          
+          if [ "$VULN_COUNT" -gt 0 ]; then
+            echo "❌ BŁĄD: Znaleziono $VULN_COUNT podatności(ości) o poziomie CRITICAL lub HIGH!"
+            echo "Obraz nie zostanie opublikowany ze względów bezpieczeństwa."
+            exit 1
+          else
+            echo "✅ SUKCES: Nie znaleziono podatności CRITICAL lub HIGH."
+            echo "Obraz może zostać bezpiecznie opublikowany."
+          fi
+          
+      # STEP 11: Finalne budowanie i publikacja multi-arch obrazu
+      - name: Build and push multi-arch Docker image
+        if: github.event_name != 'pull_request' && success()
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          # Ponowne użycie cache
+          cache-from: |
+            type=registry,ref=${{ env.CACHE_REPO }}:buildcache-${{ github.ref_name }}
+            type=registry,ref=${{ env.CACHE_REPO }}:buildcache-main
+          cache-to: |
+            type=registry,ref=${{ env.CACHE_REPO }}:buildcache-${{ github.ref_name }},mode=max
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: true  # Publikuj do GHCR
+          
+      # STEP 12: Podsumowanie i informacje o opublikowanym obrazie
+      - name: Image published successfully
+        if: github.event_name != 'pull_request' && success()
+        run: |
+          echo "🎉 Obraz został pomyślnie opublikowany!"
+          echo ""
+          echo "📦 Tagi obrazu:"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo ""
+          echo "🏗️ Architektury: linux/amd64, linux/arm64"
+          echo "🔒 Skanowanie CVE: Przeszło pomyślnie"
+          echo "📊 Cache: Zaktualizowany w ${{ env.CACHE_REPO }}:buildcache-${{ github.ref_name }}"
+          echo ""
+          echo "Aby uruchomić obraz:"
+          echo "docker run -p 3000:3000 $(echo '${{ steps.meta.outputs.tags }}' | head -1)"
