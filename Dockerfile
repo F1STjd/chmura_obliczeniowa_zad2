@@ -9,7 +9,7 @@
 # ----------------
 FROM alpine:3.21 AS builder
 
-# Instalacja zależności kompilacji z obsługą cross-compilation
+# Instalacja zależności kompilacji dla multi-arch
 RUN apk add --no-cache \
       build-base \
       cmake \
@@ -17,10 +17,7 @@ RUN apk add --no-cache \
       linux-headers \
       musl-dev \
       openssl-libs-static \
-      libstdc++-dev \
-      # Dodatkowo dla multi-arch
-      gcc-aarch64-none-elf \
-      gcc-x86_64-linux-gnu
+      libstdc++-dev
 
 # Argumenty build-time dla obsługi różnych architektur
 ARG TARGETPLATFORM
@@ -32,19 +29,23 @@ WORKDIR /src
 # Kopiowanie kodu źródłowego i plików konfiguracyjnych
 COPY CMakeLists.txt main.cpp ./
 
-# Build static fmt library z obsługą cross-compilation
-RUN git clone --depth 1 https://github.com/fmtlib/fmt.git \
+# Build static fmt library
+RUN git clone --depth 1 --branch 10.1.1 https://github.com/fmtlib/fmt.git \
   && mkdir fmt/build && cd fmt/build \
   && cmake -DCMAKE_BUILD_TYPE=MinSizeRel \
            -DBUILD_SHARED_LIBS=OFF \
            -DCMAKE_INSTALL_PREFIX=/usr \
            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+           -DFMT_DOC=OFF \
+           -DFMT_TEST=OFF \
            .. \
-  && make -j$(nproc) install
+  && make -j$(nproc) install \
+  && cd ../.. && rm -rf fmt
 
-# Instalacja httplib (header-only library)
+# Install httplib (header-only library)
 RUN git clone --depth 1 https://github.com/yhirose/cpp-httplib.git \
-  && cp -R cpp-httplib /usr/include/httplib
+  && cp cpp-httplib/httplib.h /usr/include/ \
+  && rm -rf cpp-httplib
 
 # Build aplikacji z maksymalną optymalizacją rozmiaru i statycznym linkowaniem
 WORKDIR /src

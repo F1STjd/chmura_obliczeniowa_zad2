@@ -9,7 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(fmt REQUIRED)
 
-add_subdirectory(cpp-httplib)
+# httplib is header-only, no need to add subdirectory
 
 add_executable(main 
   main.cpp
@@ -17,7 +17,6 @@ add_executable(main
 
 target_link_libraries(main PRIVATE 
   fmt::fmt
-  httplib::httplib
   ${ZLIB_LIBRARIES}
 )
 
